@@ -2,45 +2,49 @@ package one.wabbit
 
 import java.nio.charset.StandardCharsets
 import kotlin.math.ceil
-import kotlin.math.roundToInt
+
+/** Custom exception for Base91 encoding/decoding errors, including invalid input characters. */
+class Base91Exception(message: String) :
+    IllegalArgumentException(message) // Inherit from IllegalArgumentException
 
 /**
- * Custom exception for Base91 encoding/decoding errors, including invalid input characters.
- */
-class Base91Exception(message: String) : IllegalArgumentException(message) // Inherit from IllegalArgumentException
-
-
-/**
- * Object providing Base91 encoding and decoding functionality.
- * Base91 is a binary-to-text encoding scheme that uses a 91-character alphabet,
- * providing more efficient encoding than Base64 for many types of data.
+ * Object providing Base91 encoding and decoding functionality. Base91 is a binary-to-text encoding
+ * scheme that uses a 91-character alphabet, providing more efficient encoding than Base64 for many
+ * types of data.
  */
 object Base91 {
-    private const val ENCODING_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@[]^_`{|}~\""
+    private const val ENCODING_ALPHABET =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@[]^_`{|}~\""
     private const val BASE = 91
     private const val AVERAGE_ENCODING_RATIO = 1.2307692307692308
+
     // Encoding table: Character for each value 0-90
     private val ENCODING_TABLE: ByteArray = ENCODING_ALPHABET.toByteArray(StandardCharsets.US_ASCII)
+
     // Decoding table: Value for each character (ASCII 0-255), -1 for invalid chars
-    private val DECODING_TABLE: ByteArray = ByteArray(256) { -1 }.apply {
-        ENCODING_TABLE.forEachIndexed { index, byte ->
-            // Use toInt() and UByte to handle potential negative byte values correctly as indices
-            this[byte.toUByte().toInt()] = index.toByte()
-        }
-    }
+    private val DECODING_TABLE: ByteArray =
+        ByteArray(256) { -1 }
+            .apply {
+                ENCODING_TABLE.forEachIndexed { index, byte ->
+                    // Use toInt() and UByte to handle potential negative byte values correctly as
+                    // indices
+                    this[byte.toUByte().toInt()] = index.toByte()
+                }
+            }
 
     // --- Constants for Bit Manipulation ---
     // The threshold value determines if we process 13 or 14 bits
-    internal const val THRESHOLD_13_BITS = 88 // If (value & MASK_13_BITS) > THRESHOLD_13_BITS, use 13 bits, else 14
+    internal const val THRESHOLD_13_BITS =
+        88 // If (value & MASK_13_BITS) > THRESHOLD_13_BITS, use 13 bits, else 14
     internal const val BITS_13 = 13
     internal const val BITS_14 = 14
     internal const val MASK_13_BITS = (1 shl BITS_13) - 1 // 8191
     internal const val MASK_14_BITS = (1 shl BITS_14) - 1 // 16383
 
     /**
-     * Estimates the maximum required buffer size for Base91 encoding.
-     * ~14 bits of input become 2 characters (16 bits). Worst case is slightly larger.
-     * Using ceil(inputSize * 1.231) ensures enough space. (Ratio derived from 16/13)
+     * Estimates the maximum required buffer size for Base91 encoding. ~14 bits of input become 2
+     * characters (16 bits). Worst case is slightly larger. Using ceil(inputSize * 1.231) ensures
+     * enough space. (Ratio derived from 16/13)
      */
     private fun estimateEncodedSize(inputSize: Int): Int {
         if (inputSize == 0) return 0
@@ -50,9 +54,9 @@ object Base91 {
     }
 
     /**
-     * Estimates the maximum required buffer size for Base91 decoding.
-     * 2 characters (16 bits) become ~13-14 bits.
-     * Using inputSize directly is a safe overestimate, as decoded size <= encoded size.
+     * Estimates the maximum required buffer size for Base91 decoding. 2 characters (16 bits) become
+     * ~13-14 bits. Using inputSize directly is a safe overestimate, as decoded size <= encoded
+     * size.
      */
     private fun estimateDecodedSize(inputSize: Int): Int {
         // return ceil(inputSize * (14.0 / 16.0)).toInt() // Theoretical max
@@ -89,9 +93,7 @@ object Base91 {
      * @return The decoded byte array.
      * @throws Base91Exception if the input contains invalid Base91 characters.
      */
-    fun decode(input: String): ByteArray {
-        return decode(input.toByteArray(StandardCharsets.US_ASCII))
-    }
+    fun decode(input: String): ByteArray = decode(input.toByteArray(StandardCharsets.US_ASCII))
 
     /**
      * Decodes a Base91 encoded byte array into a byte array.
@@ -116,8 +118,8 @@ object Base91 {
     }
 
     /**
-     * Internal stateful encoder for Base91.
-     * Processes byte chunks and maintains leftover bits between calls.
+     * Internal stateful encoder for Base91. Processes byte chunks and maintains leftover bits
+     * between calls.
      */
     internal class Encoder {
         private var bitQueue = 0 // Holds bits waiting to be processed
@@ -133,7 +135,13 @@ object Base91 {
          * @param outOffset Starting offset in the output array.
          * @return The number of bytes written to the output array.
          */
-        fun encodeChunk(input: ByteArray, offset: Int, length: Int, output: ByteArray, outOffset: Int): Int {
+        fun encodeChunk(
+            input: ByteArray,
+            offset: Int,
+            length: Int,
+            output: ByteArray,
+            outOffset: Int,
+        ): Int {
             var currentIn = offset
             val endIn = offset + length
             var currentOut = outOffset
@@ -168,8 +176,8 @@ object Base91 {
         }
 
         /**
-         * Processes any remaining bits after all input bytes have been consumed.
-         * Writes the final 1 or 2 characters to the output buffer.
+         * Processes any remaining bits after all input bytes have been consumed. Writes the final 1
+         * or 2 characters to the output buffer.
          *
          * @param output Output byte array.
          * @param outOffset Offset in the output array where writing should start.
@@ -204,13 +212,14 @@ object Base91 {
     }
 
     /**
-     * Internal stateful decoder for Base91.
-     * Processes character chunks and maintains state between calls.
+     * Internal stateful decoder for Base91. Processes character chunks and maintains state between
+     * calls.
      */
     internal class Decoder {
-        private var bitQueue = 0  // Holds reconstructed bits
-        private var bitCount = 0  // Number of valid bits in the queue
-        private var decodeValue = -1 // Holds value of the first character in a pair (-1 means waiting for first char)
+        private var bitQueue = 0 // Holds reconstructed bits
+        private var bitCount = 0 // Number of valid bits in the queue
+        private var decodeValue =
+            -1 // Holds value of the first character in a pair (-1 means waiting for first char)
 
         // State for mark/reset functionality in streams
         private var savedState: IntArray? = null // Stores [bitQueue, bitCount, decodeValue]
@@ -226,7 +235,13 @@ object Base91 {
          * @return The number of bytes written to the output array.
          * @throws Base91Exception if an invalid Base91 character is encountered.
          */
-        fun decodeChunk(input: ByteArray, offset: Int, length: Int, output: ByteArray, outOffset: Int): Int {
+        fun decodeChunk(
+            input: ByteArray,
+            offset: Int,
+            length: Int,
+            output: ByteArray,
+            outOffset: Int,
+        ): Int {
             var currentIn = offset
             val endIn = offset + length
             var currentOut = outOffset
@@ -237,7 +252,7 @@ object Base91 {
                 // Input validation
                 if (charValue == -1) {
                     throw Base91Exception(
-                        "Invalid Base91 character '${input[currentIn].toInt().toChar()}' (ASCII: ${input[currentIn].toUByte()}) at input position ${currentIn}"
+                        "Invalid Base91 character '${input[currentIn].toInt().toChar()}' (ASCII: ${input[currentIn].toUByte()}) at input position $currentIn"
                     )
                 }
 
@@ -250,7 +265,8 @@ object Base91 {
                     // Add the combined value (13 or 14 bits) to the bit queue
                     bitQueue = bitQueue or (decodeValue shl bitCount)
                     // Determine if 13 or 14 bits were added
-                    bitCount += if ((decodeValue and MASK_13_BITS) > THRESHOLD_13_BITS) BITS_13 else BITS_14
+                    bitCount +=
+                        if ((decodeValue and MASK_13_BITS) > THRESHOLD_13_BITS) BITS_13 else BITS_14
                     decodeValue = -1 // Reset waiting for the next pair
 
                     // Extract full bytes (8 bits) from the queue
@@ -266,8 +282,8 @@ object Base91 {
         }
 
         /**
-         * Processes the final (potentially unpaired) character after all input is read.
-         * Writes the last remaining byte(s) if any.
+         * Processes the final (potentially unpaired) character after all input is read. Writes the
+         * last remaining byte(s) if any.
          *
          * @param output Output byte array.
          * @param outOffset Offset in the output array where writing should start.
@@ -280,8 +296,11 @@ object Base91 {
             if (decodeValue != -1) {
                 // Add its value to the queue (represents the final bits)
                 bitQueue = bitQueue or (decodeValue shl bitCount)
-                // We don't know if it was originally 13 or 14 bits, but we process remaining bits anyway
-                bitCount += if ((decodeValue and MASK_13_BITS) > THRESHOLD_13_BITS) BITS_13 else BITS_14 // Approx.
+                // We don't know if it was originally 13 or 14 bits, but we process remaining bits
+                // anyway
+                bitCount +=
+                    if ((decodeValue and MASK_13_BITS) > THRESHOLD_13_BITS) BITS_13
+                    else BITS_14 // Approx.
             }
 
             // Write out the last byte if there are enough bits remaining in the queue
@@ -325,7 +344,6 @@ object Base91 {
 
         /** Returns true if a mark has been saved. */
         fun isMarkSaved(): Boolean = savedState != null
-
 
         /** Initializes the decoder state. */
         init {

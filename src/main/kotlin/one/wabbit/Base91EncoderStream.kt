@@ -5,32 +5,33 @@ import java.io.IOException
 import java.io.OutputStream
 
 /**
- * An OutputStream that encodes written bytes into Base91 format and writes the result
- * to an underlying OutputStream.
+ * An OutputStream that encodes written bytes into Base91 format and writes the result to an
+ * underlying OutputStream.
  *
  * Remember to close() the stream to ensure all buffered data is encoded and flushed.
  */
 class Base91EncoderStream(
     outputStream: OutputStream,
-    // Using buffer sizes that are multiples of typical block sizes (e.g., 13/14 bytes in, ~16 bytes out)
+    // Using buffer sizes that are multiples of typical block sizes (e.g., 13/14 bytes in, ~16 bytes
+    // out)
     // Can be tuned, but these are reasonable defaults.
     private val inputBufferSize: Int = 13 * 3, // Process ~3 blocks of input
-    private val outputBufferSize: Int = 16 * 3 // Room for ~3 blocks of output + finish
+    private val outputBufferSize: Int = 16 * 3, // Room for ~3 blocks of output + finish
 ) : FilterOutputStream(outputStream) {
-
     private val encoder = Base91.Encoder()
     private val inputBuffer: ByteArray = ByteArray(inputBufferSize)
     private val outputBuffer: ByteArray = ByteArray(outputBufferSize)
     private var inputBufferCount: Int = 0 // Number of bytes currently in inputBuffer
 
     /**
-     * Encodes the contents of the input buffer and writes the resulting
-     * Base91 characters to the underlying output stream.
+     * Encodes the contents of the input buffer and writes the resulting Base91 characters to the
+     * underlying output stream.
      */
     @Throws(IOException::class)
     private fun flushBuffer() {
         if (inputBufferCount > 0) {
-            val encodedCount = encoder.encodeChunk(inputBuffer, 0, inputBufferCount, outputBuffer, 0)
+            val encodedCount =
+                encoder.encodeChunk(inputBuffer, 0, inputBufferCount, outputBuffer, 0)
             if (encodedCount > 0) {
                 out.write(outputBuffer, 0, encodedCount)
             }
@@ -78,10 +79,9 @@ class Base91EncoderStream(
     }
 
     /**
-     * Flushes the stream. This encodes any buffered bytes and writes them to the
-     * underlying stream. It then calls the `finish` method on the encoder
-     * to handle any final leftover bits and writes the result. Finally, it flushes
-     * the underlying output stream.
+     * Flushes the stream. This encodes any buffered bytes and writes them to the underlying stream.
+     * It then calls the `finish` method on the encoder to handle any final leftover bits and writes
+     * the result. Finally, it flushes the underlying output stream.
      */
     @Throws(IOException::class)
     override fun flush() {
@@ -97,9 +97,8 @@ class Base91EncoderStream(
     }
 
     /**
-     * Closes this output stream and releases any system resources associated
-     * with this stream. This method first flushes the stream, then closes the
-     * underlying output stream.
+     * Closes this output stream and releases any system resources associated with this stream. This
+     * method first flushes the stream, then closes the underlying output stream.
      */
     @Throws(IOException::class)
     override fun close() {

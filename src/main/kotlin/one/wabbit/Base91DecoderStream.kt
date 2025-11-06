@@ -3,27 +3,28 @@ package one.wabbit
 import java.io.FilterInputStream
 import java.io.IOException
 import java.io.InputStream
-import java.util.*
 
 /**
- * An InputStream that decodes Base91 encoded data read from an underlying InputStream.
- * Supports mark/reset if the underlying stream does.
+ * An InputStream that decodes Base91 encoded data read from an underlying InputStream. Supports
+ * mark/reset if the underlying stream does.
  */
 class Base91DecoderStream(
     inputStream: InputStream,
     // Buffer sizes can be tuned.
     private val encodedBufferSize: Int = 16 * 3, // Read ~3 blocks of encoded data
-    private val decodedBufferSize: Int = 14 * 3  // Room for ~3 blocks of decoded data + finish
+    private val decodedBufferSize: Int = 14 * 3, // Room for ~3 blocks of decoded data + finish
 ) : FilterInputStream(inputStream) {
-
     private val decoder = Base91.Decoder()
+
     // Buffer to hold data read from the underlying stream (Base91 encoded)
     private val encodedBuffer: ByteArray = ByteArray(encodedBufferSize)
+
     // Buffer to hold decoded bytes ready for reading
     private var decodedBuffer: ByteArray = ByteArray(decodedBufferSize)
 
     private var decodedBufferReadPos: Int = 0 // Current reading position in decodedBuffer
-    private var decodedBufferCount: Int = 0  // Number of valid decoded bytes in decodedBuffer (-1 signifies EOF)
+    private var decodedBufferCount: Int =
+        0 // Number of valid decoded bytes in decodedBuffer (-1 signifies EOF)
 
     // --- Mark/Reset State ---
     private var markDecodedBuffer: ByteArray? = null // Saved decoded buffer state
@@ -32,8 +33,8 @@ class Base91DecoderStream(
     private var isMarkSet: Boolean = false // Tracks if our mark() method was called
 
     /**
-     * Reads encoded data from the underlying stream and decodes it into the
-     * decodedBuffer until the buffer has data or EOF is reached.
+     * Reads encoded data from the underlying stream and decodes it into the decodedBuffer until the
+     * buffer has data or EOF is reached.
      *
      * @return true if data was successfully decoded into the buffer, false if EOF was reached.
      * @throws IOException if an I/O error occurs reading from the underlying stream.
@@ -62,7 +63,6 @@ class Base91DecoderStream(
         }
         return decodedBufferCount > 0 // Return true if we got some decoded bytes
     }
-
 
     @Throws(IOException::class)
     override fun read(): Int {
@@ -109,7 +109,13 @@ class Base91DecoderStream(
 
             // Calculate how many bytes can be copied from the current buffer
             val bytesToCopy = minOf(len - totalBytesRead, decodedBufferCount - decodedBufferReadPos)
-            System.arraycopy(decodedBuffer, decodedBufferReadPos, b, off + totalBytesRead, bytesToCopy)
+            System.arraycopy(
+                decodedBuffer,
+                decodedBufferReadPos,
+                b,
+                off + totalBytesRead,
+                bytesToCopy,
+            )
 
             decodedBufferReadPos += bytesToCopy
             totalBytesRead += bytesToCopy
@@ -152,11 +158,10 @@ class Base91DecoderStream(
     }
 
     /**
-     * Returns an estimate of the number of bytes that can be read (or skipped over)
-     * from this input stream without blocking.
-     * This is based on bytes remaining in the decoded buffer plus an estimate
-     * from the underlying stream, adjusted by the approximate Base91 ratio.
-     * Note: This is only an estimate.
+     * Returns an estimate of the number of bytes that can be read (or skipped over) from this input
+     * stream without blocking. This is based on bytes remaining in the decoded buffer plus an
+     * estimate from the underlying stream, adjusted by the approximate Base91 ratio. Note: This is
+     * only an estimate.
      */
     @Throws(IOException::class)
     override fun available(): Int {
@@ -185,9 +190,7 @@ class Base91DecoderStream(
 
     // --- Mark/Reset Implementation ---
 
-    override fun markSupported(): Boolean {
-        return `in`.markSupported()
-    }
+    override fun markSupported(): Boolean = `in`.markSupported()
 
     @Synchronized
     override fun mark(readlimit: Int) {
@@ -196,11 +199,12 @@ class Base91DecoderStream(
         decoder.saveMark() // Save decoder state
 
         // Save decoded buffer state
-        markDecodedBuffer = if (decodedBufferCount > 0) {
-            Arrays.copyOf(decodedBuffer, decodedBufferCount)
-        } else {
-            null
-        }
+        markDecodedBuffer =
+            if (decodedBufferCount > 0) {
+                decodedBuffer.copyOf(decodedBufferCount)
+            } else {
+                null
+            }
         markDecodedBufferReadPos = decodedBufferReadPos
         markDecodedBufferCount = decodedBufferCount
         isMarkSet = true // Mark that our stream's mark() was called
@@ -212,7 +216,9 @@ class Base91DecoderStream(
         if (!markSupported()) {
             throw IOException("mark/reset not supported by underlying stream")
         }
-        if (!isMarkSet || !decoder.isMarkSaved()) { // Check if our mark method was called and decoder state was saved
+        if (
+            !isMarkSet || !decoder.isMarkSaved()
+        ) { // Check if our mark method was called and decoder state was saved
             throw IOException("mark() not called or invalidated before reset()")
         }
 
@@ -222,7 +228,7 @@ class Base91DecoderStream(
         // Restore decoded buffer state
         markDecodedBuffer?.let {
             // Ensure buffer has enough capacity (might have been resized)
-            if(decodedBuffer.size < it.size) {
+            if (decodedBuffer.size < it.size) {
                 decodedBuffer = ByteArray(it.size)
             }
             System.arraycopy(it, 0, decodedBuffer, 0, it.size)

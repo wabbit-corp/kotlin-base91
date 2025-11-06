@@ -4,43 +4,54 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import kotlin.random.Random
-import kotlin.test.*
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+import kotlin.test.fail
 
 @OptIn(ExperimentalStdlibApi::class)
 class Base91Spec {
-    val regressionTests = listOf(
-        "".hexToByteArray() to "",
-        "50".hexToByteArray() to "@A",
-        "d826".hexToByteArray() to "XTB",
-        "3e25e4".hexToByteArray() to ")OFU",
-        "8f9f30e2".hexToByteArray() to ",}Zx4",
-        "8beae1cfa9".hexToByteArray() to "8di|kdB",
-        "2a4ba66e7dc0".hexToByteArray() to "lf57T}UE",
-        "441a4bd02b4d56".hexToByteArray() to "[/2G:epjF",
-        "a77f23b466c7554a".hexToByteArray() to "E~KDV.ugGN",
-        "c3040347164ffe48e7".hexToByteArray() to "kN,(8Pu@<5YB",
-        "6f6f8bb54a3fb21a5b81".hexToByteArray() to "mr*ix06M\$x]BC",
-        "9057617598f8e3378c1216".hexToByteArray() to "a&FfSRfW;JIa}A",
-    )
+    val regressionTests =
+        listOf(
+            "".hexToByteArray() to "",
+            "50".hexToByteArray() to "@A",
+            "d826".hexToByteArray() to "XTB",
+            "3e25e4".hexToByteArray() to ")OFU",
+            "8f9f30e2".hexToByteArray() to ",}Zx4",
+            "8beae1cfa9".hexToByteArray() to "8di|kdB",
+            "2a4ba66e7dc0".hexToByteArray() to "lf57T}UE",
+            "441a4bd02b4d56".hexToByteArray() to "[/2G:epjF",
+            "a77f23b466c7554a".hexToByteArray() to "E~KDV.ugGN",
+            "c3040347164ffe48e7".hexToByteArray() to "kN,(8Pu@<5YB",
+            "6f6f8bb54a3fb21a5b81".hexToByteArray() to "mr*ix06M\$x]BC",
+            "9057617598f8e3378c1216".hexToByteArray() to "a&FfSRfW;JIa}A",
+        )
 
-    @Test fun `test`() {
+    @Test
+    fun `test`() {
         for ((decoded, encoded) in regressionTests) {
             assertEquals(encoded, Base91.encode(decoded))
             assertTrue(decoded.contentEquals(Base91.decode(encoded)))
         }
     }
 
-    @Test fun `roundabout`() {
+    @Test
+    fun `roundabout`() {
         for (i in 0 until 1000) {
             val bytes = Random.nextBytes(i)
             val encoded = Base91.encode(bytes)
             val decoded = Base91.decode(encoded)
-            assertTrue(bytes.contentEquals(decoded), "Decoding the encoded input should match the original input for size $i")
+            assertTrue(
+                bytes.contentEquals(decoded),
+                "Decoding the encoded input should match the original input for size $i",
+            )
         }
     }
 
     // New Test for Streams
-    @Test fun `stream roundabout`() {
+    @Test
+    fun `stream roundabout`() {
         for (i in 0 until 1000) {
             val originalBytes = Random.nextBytes(i)
 
@@ -62,13 +73,17 @@ class Base91Spec {
             // Verify
             assertTrue(
                 originalBytes.contentEquals(decodedBytes),
-                "Stream encoding/decoding failed for size $i. Original: ${originalBytes.toHexString()}, Decoded: ${decodedBytes.toHexString()}"
+                "Stream encoding/decoding failed for size $i. Original: ${originalBytes.toHexString()}, Decoded: ${decodedBytes.toHexString()}",
             )
 
             // Optional: Verify encoded string matches direct encoding for sanity check
             val encodedStringFromStream = String(encodedBytes, Charsets.UTF_8)
             val encodedStringDirect = Base91.encode(originalBytes)
-            assertEquals(encodedStringDirect, encodedStringFromStream, "Stream encoded output differs from direct encoding for size $i")
+            assertEquals(
+                encodedStringDirect,
+                encodedStringFromStream,
+                "Stream encoded output differs from direct encoding for size $i",
+            )
         }
     }
 
@@ -80,11 +95,15 @@ class Base91Spec {
 
     // --- New Tests for DecoderStream ---
 
-    @Test fun `decoder stream markSupported`() {
+    @Test
+    fun `decoder stream markSupported`() {
         // Base stream supports mark
         val bais = ByteArrayInputStream(testEncodedBytes)
         val decoderStream = Base91DecoderStream(bais)
-        assertTrue(decoderStream.markSupported(), "DecoderStream should support mark if underlying stream does (ByteArrayInputStream)")
+        assertTrue(
+            decoderStream.markSupported(),
+            "DecoderStream should support mark if underlying stream does (ByteArrayInputStream)",
+        )
         decoderStream.close()
 
         // TODO: Add a test case with a base stream that *doesn't* support mark if needed
@@ -92,8 +111,8 @@ class Base91Spec {
         // assertFalse(Base91DecoderStream(nonMarkingStream).markSupported())
     }
 
-
-    @Test fun `decoder stream mark and reset`() {
+    @Test
+    fun `decoder stream mark and reset`() {
         val bais = ByteArrayInputStream(testEncodedBytes)
         Base91DecoderStream(bais).use { decoderStream ->
             assertTrue(decoderStream.markSupported())
@@ -111,9 +130,21 @@ class Base91Spec {
             val byte3 = decoderStream.read()
             val byte4 = decoderStream.read()
             val byte5 = decoderStream.read()
-            assertEquals(testDecodedBytes[2].toInt() and 0xFF, byte3, "Third byte mismatch before reset")
-            assertEquals(testDecodedBytes[3].toInt() and 0xFF, byte4, "Fourth byte mismatch before reset")
-            assertEquals(testDecodedBytes[4].toInt() and 0xFF, byte5, "Fifth byte mismatch before reset")
+            assertEquals(
+                testDecodedBytes[2].toInt() and 0xFF,
+                byte3,
+                "Third byte mismatch before reset",
+            )
+            assertEquals(
+                testDecodedBytes[3].toInt() and 0xFF,
+                byte4,
+                "Fourth byte mismatch before reset",
+            )
+            assertEquals(
+                testDecodedBytes[4].toInt() and 0xFF,
+                byte5,
+                "Fifth byte mismatch before reset",
+            )
 
             // Reset to mark
             try {
@@ -135,31 +166,42 @@ class Base91Spec {
             assertEquals(3, remaining.size, "Incorrect number of remaining bytes")
             assertTrue(
                 testDecodedBytes.sliceArray(5 until 8).contentEquals(remaining),
-                "Remaining bytes mismatch after reset"
+                "Remaining bytes mismatch after reset",
             )
 
             // Ensure end of stream
-            assertEquals(-1, decoderStream.read(), "Stream should be at end after reading all bytes")
-
+            assertEquals(
+                -1,
+                decoderStream.read(),
+                "Stream should be at end after reading all bytes",
+            )
         }
     }
 
-    @Test fun `decoder stream reset without mark`() {
+    @Test
+    fun `decoder stream reset without mark`() {
         val bais = ByteArrayInputStream(testEncodedBytes)
         bais.reset()
         Base91DecoderStream(bais).use { decoderStream ->
-            assertFailsWith<IOException>("Should throw IOException when reset() is called without mark()") {
+            assertFailsWith<IOException>(
+                "Should throw IOException when reset() is called without mark()"
+            ) {
                 decoderStream.reset()
             }
         }
     }
 
-    @Test fun `decoder stream skip`() {
+    @Test
+    fun `decoder stream skip`() {
         val bais = ByteArrayInputStream(testEncodedBytes)
         Base91DecoderStream(bais).use { decoderStream ->
             // Read first byte: 0xa7
             val byte1 = decoderStream.read()
-            assertEquals(testDecodedBytes[0].toInt() and 0xFF, byte1, "First byte mismatch before skip")
+            assertEquals(
+                testDecodedBytes[0].toInt() and 0xFF,
+                byte1,
+                "First byte mismatch before skip",
+            )
 
             // Skip next 4 bytes (0x7f, 0x23, 0xb4, 0x66)
             val skipped = decoderStream.skip(4)
@@ -180,11 +222,16 @@ class Base91Spec {
             assertEquals(1L, skippedPastEnd, "Skip past end should return bytes remaining")
 
             // Ensure end of stream
-            assertEquals(-1, decoderStream.read(), "Stream should be at end after skipping past end")
+            assertEquals(
+                -1,
+                decoderStream.read(),
+                "Stream should be at end after skipping past end",
+            )
         }
     }
 
-    @Test fun `decoder stream available`() {
+    @Test
+    fun `decoder stream available`() {
         val bais = ByteArrayInputStream(testEncodedBytes) // Encoded length: 10 bytes
         Base91DecoderStream(bais).use { decoderStream ->
             // Initial check - depends on internal buffer size and underlying stream
@@ -194,7 +241,8 @@ class Base91Spec {
             val initialAvailable = decoderStream.available()
             assertTrue(initialAvailable >= 0, "Initial available should be non-negative")
             // It's an estimate, so exact value is hard to pin down, but should be > 0
-            //assertTrue(initialAvailable > 0, "Initial available should be positive for non-empty stream")
+            // assertTrue(initialAvailable > 0, "Initial available should be positive for non-empty
+            // stream")
 
             // Read 3 bytes
             decoderStream.read()
@@ -202,8 +250,10 @@ class Base91Spec {
             decoderStream.read()
             val availableAfter3 = decoderStream.available()
             assertTrue(availableAfter3 >= 0, "Available after read should be non-negative")
-            // Available might decrease, but not necessarily by exactly 3 due to buffering/estimation
-            // It should reflect roughly 8 - 3 = 5 remaining bytes, possibly plus/minus buffer effects
+            // Available might decrease, but not necessarily by exactly 3 due to
+            // buffering/estimation
+            // It should reflect roughly 8 - 3 = 5 remaining bytes, possibly plus/minus buffer
+            // effects
 
             // Read remaining 5 bytes
             val remainingBytes = ByteArray(5)
@@ -216,7 +266,11 @@ class Base91Spec {
 
             // Check after reading past end
             assertEquals(-1, decoderStream.read())
-            assertEquals(0, decoderStream.available(), "Available should be 0 after attempting read past end")
+            assertEquals(
+                0,
+                decoderStream.available(),
+                "Available should be 0 after attempting read past end",
+            )
         }
 
         // Test with empty input
@@ -224,7 +278,11 @@ class Base91Spec {
         Base91DecoderStream(emptyBais).use { emptyDecoder ->
             assertEquals(0, emptyDecoder.available(), "Available should be 0 for empty stream")
             assertEquals(-1, emptyDecoder.read())
-            assertEquals(0, emptyDecoder.available(), "Available should be 0 after reading empty stream")
+            assertEquals(
+                0,
+                emptyDecoder.available(),
+                "Available should be 0 after reading empty stream",
+            )
         }
     }
 }
