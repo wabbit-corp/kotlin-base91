@@ -1,6 +1,4 @@
 package one.wabbit
-
-import java.nio.charset.StandardCharsets
 import kotlin.math.ceil
 
 /** Custom exception for Base91 encoding/decoding errors, including invalid input characters. */
@@ -19,7 +17,8 @@ object Base91 {
     private const val AVERAGE_ENCODING_RATIO = 1.2307692307692308
 
     // Encoding table: Character for each value 0-90
-    private val ENCODING_TABLE: ByteArray = ENCODING_ALPHABET.toByteArray(StandardCharsets.US_ASCII)
+    private val ENCODING_TABLE: ByteArray =
+        ByteArray(ENCODING_ALPHABET.length) { index -> ENCODING_ALPHABET[index].code.toByte() }
 
     // Decoding table: Value for each character (ASCII 0-255), -1 for invalid chars
     private val DECODING_TABLE: ByteArray =
@@ -81,9 +80,7 @@ object Base91 {
         val finalEncodedLength = encoder.finish(outputBuffer, mainEncodedLength)
         val totalLength = mainEncodedLength + finalEncodedLength
 
-        // Trim the buffer to the actual size
-        val resultBytes = outputBuffer.copyOf(totalLength)
-        return String(resultBytes, StandardCharsets.US_ASCII)
+        return outputBuffer.decodeAsciiToString(totalLength)
     }
 
     /**
@@ -93,7 +90,7 @@ object Base91 {
      * @return The decoded byte array.
      * @throws Base91Exception if the input contains invalid Base91 characters.
      */
-    fun decode(input: String): ByteArray = decode(input.toByteArray(StandardCharsets.US_ASCII))
+    fun decode(input: String): ByteArray = decode(input.requireAsciiBytes())
 
     /**
      * Decodes a Base91 encoded byte array into a byte array.
@@ -351,3 +348,18 @@ object Base91 {
         }
     }
 }
+
+private fun String.requireAsciiBytes(): ByteArray {
+    val result = ByteArray(length)
+    for (index in indices) {
+        val char = this[index]
+        require(char.code <= 0x7F) {
+            "Base91 input must be ASCII, but found '${char}' (code ${char.code}) at index $index"
+        }
+        result[index] = char.code.toByte()
+    }
+    return result
+}
+
+private fun ByteArray.decodeAsciiToString(length: Int): String =
+    CharArray(length) { index -> (this[index].toInt() and 0xFF).toChar() }.concatToString()

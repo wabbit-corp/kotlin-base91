@@ -8,6 +8,7 @@ import java.io.InputStream
  * An InputStream that decodes Base91 encoded data read from an underlying InputStream. Supports
  * mark/reset if the underlying stream does.
  */
+@PlatformSpecificBase91Api
 class Base91DecoderStream(
     inputStream: InputStream,
     // Buffer sizes can be tuned.

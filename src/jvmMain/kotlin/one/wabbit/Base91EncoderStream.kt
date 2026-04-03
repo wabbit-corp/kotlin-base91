@@ -10,6 +10,7 @@ import java.io.OutputStream
  *
  * Remember to close() the stream to ensure all buffered data is encoded and flushed.
  */
+@PlatformSpecificBase91Api
 class Base91EncoderStream(
     outputStream: OutputStream,
     // Using buffer sizes that are multiples of typical block sizes (e.g., 13/14 bytes in, ~16 bytes

@@ -1,3 +1,5 @@
+@file:OptIn(PlatformSpecificBase91Api::class)
+
 package one.wabbit
 
 import java.io.ByteArrayInputStream
