@@ -14,6 +14,14 @@ import kotlin.test.fail
 
 @OptIn(ExperimentalStdlibApi::class)
 class Base91Spec {
+    private class OneByteAtATime(private val bytes: ByteArray) : ByteArrayInputStream(bytes) {
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            if (pos >= count) return -1
+            b[off] = buf[pos++]
+            return 1
+        }
+    }
+
     val regressionTests =
         listOf(
             "".hexToByteArray() to "",
@@ -86,6 +94,94 @@ class Base91Spec {
                 encodedStringFromStream,
                 "Stream encoded output differs from direct encoding for size $i",
             )
+        }
+    }
+
+    @Test
+    fun `decoder stream handles partial encoded reads`() {
+        val encoded = "@A".toByteArray()
+        Base91DecoderStream(OneByteAtATime(encoded)).use { stream ->
+            assertEquals(0x50, stream.read())
+            assertEquals(-1, stream.read())
+        }
+    }
+
+    @Test
+    fun `flush must not finalize the stream`() {
+        val out = ByteArrayOutputStream()
+
+        Base91EncoderStream(out).use { stream ->
+            stream.write("He".encodeToByteArray())
+            stream.flush()
+            stream.write("llo".encodeToByteArray())
+        }
+
+        val encoded = out.toString(Charsets.US_ASCII)
+        assertEquals(Base91.encode("Hello".encodeToByteArray()), encoded)
+    }
+
+    @Test
+    fun `streams support tiny custom buffers`() {
+        val originalBytes = "Hello".encodeToByteArray()
+
+        val out = ByteArrayOutputStream()
+        Base91EncoderStream(out, inputBufferSize = 1, outputBufferSize = 2).use { stream ->
+            stream.write(originalBytes)
+        }
+
+        val decoded =
+            Base91DecoderStream(
+                ByteArrayInputStream(out.toByteArray()),
+                encodedBufferSize = 1,
+                decodedBufferSize = 2,
+            ).use { it.readBytes() }
+
+        assertTrue(originalBytes.contentEquals(decoded))
+    }
+
+    @Test
+    fun `streams reject invalid buffer sizes`() {
+        assertFailsWith<IllegalArgumentException> {
+            Base91EncoderStream(ByteArrayOutputStream(), inputBufferSize = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            Base91EncoderStream(ByteArrayOutputStream(), inputBufferSize = 2, outputBufferSize = 1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            Base91EncoderStream(ByteArrayOutputStream(), inputBufferSize = 2, outputBufferSize = 2)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            Base91DecoderStream(ByteArrayInputStream(byteArrayOf()), encodedBufferSize = 0)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            Base91DecoderStream(
+                ByteArrayInputStream(byteArrayOf()),
+                encodedBufferSize = 1,
+                decodedBufferSize = 1,
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            Base91DecoderStream(
+                ByteArrayInputStream(byteArrayOf()),
+                encodedBufferSize = 2,
+                decodedBufferSize = 0,
+            )
+        }
+    }
+
+    @Test
+    fun `reset still works after eof`() {
+        Base91DecoderStream(
+            ByteArrayInputStream("@A".toByteArray()),
+            encodedBufferSize = 1,
+            decodedBufferSize = 2,
+        ).use { stream ->
+            stream.mark(10)
+            assertEquals(0x50, stream.read())
+            assertEquals(-1, stream.read())
+            stream.reset()
+            assertEquals(0x50, stream.read())
+            assertEquals(-1, stream.read())
         }
     }
 

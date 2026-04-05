@@ -213,6 +213,12 @@ object Base91 {
      * calls.
      */
     internal class Decoder {
+        internal data class State(
+            val bitQueue: Int,
+            val bitCount: Int,
+            val decodeValue: Int,
+        )
+
         private var bitQueue = 0 // Holds reconstructed bits
         private var bitCount = 0 // Number of valid bits in the queue
         private var decodeValue =
@@ -327,7 +333,8 @@ object Base91 {
 
         /** Saves the current decoder state for potential reset. */
         fun saveMark() {
-            savedState = intArrayOf(bitQueue, bitCount, decodeValue)
+            val state = snapshotState()
+            savedState = intArrayOf(state.bitQueue, state.bitCount, state.decodeValue)
         }
 
         /** Restores the decoder state from the last saveMark. Does nothing if no mark was saved. */
@@ -342,6 +349,14 @@ object Base91 {
         /** Returns true if a mark has been saved. */
         fun isMarkSaved(): Boolean = savedState != null
 
+        fun snapshotState(): State = State(bitQueue = bitQueue, bitCount = bitCount, decodeValue = decodeValue)
+
+        fun restoreState(state: State) {
+            bitQueue = state.bitQueue
+            bitCount = state.bitCount
+            decodeValue = state.decodeValue
+        }
+
         /** Initializes the decoder state. */
         init {
             reset()
@@ -353,8 +368,10 @@ private fun String.requireAsciiBytes(): ByteArray {
     val result = ByteArray(length)
     for (index in indices) {
         val char = this[index]
-        require(char.code <= 0x7F) {
-            "Base91 input must be ASCII, but found '${char}' (code ${char.code}) at index $index"
+        if (char.code > 0x7F) {
+            throw Base91Exception(
+                "Base91 input must be ASCII, but found '$char' (code ${char.code}) at index $index"
+            )
         }
         result[index] = char.code.toByte()
     }
@@ -363,3 +380,32 @@ private fun String.requireAsciiBytes(): ByteArray {
 
 private fun ByteArray.decodeAsciiToString(length: Int): String =
     CharArray(length) { index -> (this[index].toInt() and 0xFF).toChar() }.concatToString()
+
+internal fun requireBase91EncodingBufferSizes(inputBufferSize: Int, outputBufferSize: Int) {
+    require(inputBufferSize > 0) { "inputBufferSize must be > 0" }
+    require(outputBufferSize > 0) { "outputBufferSize must be > 0" }
+
+    val requiredOutputSize =
+        maxOf(
+            2,
+            (((inputBufferSize.toLong() * 8L) + 12L) / Base91.BITS_13).toInt() * 2,
+        )
+    require(outputBufferSize >= requiredOutputSize) {
+        "outputBufferSize must be >= $requiredOutputSize for inputBufferSize=$inputBufferSize"
+    }
+}
+
+internal fun requireBase91DecodingBufferSizes(encodedBufferSize: Int, decodedBufferSize: Int) {
+    require(encodedBufferSize > 0) { "encodedBufferSize must be > 0" }
+    require(decodedBufferSize > 0) { "decodedBufferSize must be > 0" }
+
+    val maxPairsCompletedPerChunk = (encodedBufferSize + 1) / 2
+    val requiredDecodedSize =
+        maxOf(
+            1,
+            ((7L + maxPairsCompletedPerChunk.toLong() * Base91.BITS_14) / 8L).toInt(),
+        )
+    require(decodedBufferSize >= requiredDecodedSize) {
+        "decodedBufferSize must be >= $requiredDecodedSize for encodedBufferSize=$encodedBufferSize"
+    }
+}

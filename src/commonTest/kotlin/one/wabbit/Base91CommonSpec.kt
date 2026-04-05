@@ -3,11 +3,23 @@ package one.wabbit
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlinx.io.Buffer
 
 @OptIn(ExperimentalStdlibApi::class)
 class Base91CommonSpec {
+    private fun Buffer.readAllBytes(): ByteArray {
+        val bytes = ByteArray(size.toInt())
+        val count = readAtMostTo(bytes)
+        if (bytes.isEmpty()) {
+            assertEquals(-1, count)
+        } else {
+            assertEquals(bytes.size, count)
+        }
+        return bytes
+    }
+
     private val regressionTests =
         listOf(
             "".hexToByteArray() to "",
@@ -81,6 +93,55 @@ class Base91CommonSpec {
                 encodedBytes.decodeToString(),
                 "kotlinx-io Base91 encoded bytes differed from direct encoding for size $i",
             )
+        }
+    }
+
+    @Test
+    fun `decode string throws Base91Exception for non ascii input`() {
+        assertFailsWith<Base91Exception> { Base91.decode("é") }
+    }
+
+    @Test
+    fun `kotlinx io wrappers support tiny custom buffers`() {
+        val originalBytes = "Hello".encodeToByteArray()
+
+        val encodedBuffer = Buffer()
+        Buffer().apply { write(originalBytes) }.use { plain ->
+            encodedBuffer.base91Encoding(inputBufferSize = 1, outputBufferSize = 2).use { sink ->
+                sink.write(plain, plain.size)
+            }
+        }
+
+        val decodedBuffer = Buffer()
+        Buffer().apply { write(encodedBuffer.readAllBytes()) }.base91Decoding(
+            encodedBufferSize = 1,
+            decodedBufferSize = 2,
+        ).use { source ->
+            decodedBuffer.transferFrom(source)
+        }
+
+        assertTrue(originalBytes.contentEquals(decodedBuffer.readAllBytes()))
+    }
+
+    @Test
+    fun `kotlinx io wrappers reject invalid buffer sizes`() {
+        assertFailsWith<IllegalArgumentException> {
+            Buffer().base91Encoding(inputBufferSize = 0, outputBufferSize = 2)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            Buffer().base91Encoding(inputBufferSize = 2, outputBufferSize = 1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            Buffer().base91Encoding(inputBufferSize = 2, outputBufferSize = 2)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            Buffer().base91Decoding(encodedBufferSize = 0, decodedBufferSize = 1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            Buffer().base91Decoding(encodedBufferSize = 1, decodedBufferSize = 1)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            Buffer().base91Decoding(encodedBufferSize = 2, decodedBufferSize = 0)
         }
     }
 }

@@ -15,6 +15,10 @@ class Base91DecoderStream(
     private val encodedBufferSize: Int = 16 * 3, // Read ~3 blocks of encoded data
     private val decodedBufferSize: Int = 14 * 3, // Room for ~3 blocks of decoded data + finish
 ) : FilterInputStream(inputStream) {
+    init {
+        requireBase91DecodingBufferSizes(encodedBufferSize, decodedBufferSize)
+    }
+
     private val decoder = Base91.Decoder()
 
     // Buffer to hold data read from the underlying stream (Base91 encoded)
@@ -26,11 +30,16 @@ class Base91DecoderStream(
     private var decodedBufferReadPos: Int = 0 // Current reading position in decodedBuffer
     private var decodedBufferCount: Int =
         0 // Number of valid decoded bytes in decodedBuffer (-1 signifies EOF)
+    private var upstreamExhausted = false
+    private var emittedFinalBytes = false
 
     // --- Mark/Reset State ---
+    private var markDecoderState: Base91.Decoder.State? = null
     private var markDecodedBuffer: ByteArray? = null // Saved decoded buffer state
     private var markDecodedBufferReadPos: Int = 0
     private var markDecodedBufferCount: Int = 0
+    private var markUpstreamExhausted: Boolean = false
+    private var markEmittedFinalBytes: Boolean = false
     private var isMarkSet: Boolean = false // Tracks if our mark() method was called
 
     /**
@@ -43,26 +52,33 @@ class Base91DecoderStream(
      */
     @Throws(IOException::class, Base91Exception::class)
     private fun fillDecodedBuffer(): Boolean {
-        // Reset read position as we are filling the buffer anew
         decodedBufferReadPos = 0
         decodedBufferCount = 0
 
-        // Read encoded data from the underlying stream
-        val bytesRead = `in`.read(encodedBuffer)
-
-        if (bytesRead > 0) {
-            // Decode the chunk read from the underlying stream
-            decodedBufferCount = decoder.decodeChunk(encodedBuffer, 0, bytesRead, decodedBuffer, 0)
-        } else {
-            // Underlying stream reached EOF, process final bits in decoder
-            decodedBufferCount = decoder.finish(decodedBuffer, 0)
-            // If finish produced no bytes and decode was already finished, signal EOF
-            if (decodedBufferCount == 0) {
-                decodedBufferCount = -1 // Mark stream as ended
-                return false
+        while (decodedBufferCount == 0) {
+            if (!upstreamExhausted) {
+                val bytesRead = `in`.read(encodedBuffer)
+                if (bytesRead == -1) {
+                    upstreamExhausted = true
+                } else if (bytesRead > 0) {
+                    decodedBufferCount =
+                        decoder.decodeChunk(encodedBuffer, 0, bytesRead, decodedBuffer, 0)
+                    if (decodedBufferCount > 0) return true
+                    continue
+                }
             }
+
+            if (upstreamExhausted && !emittedFinalBytes) {
+                emittedFinalBytes = true
+                decodedBufferCount = decoder.finish(decodedBuffer, 0)
+                if (decodedBufferCount > 0) return true
+            }
+
+            decodedBufferCount = -1
+            return false
         }
-        return decodedBufferCount > 0 // Return true if we got some decoded bytes
+
+        return true
     }
 
     @Throws(IOException::class)
@@ -181,9 +197,10 @@ class Base91DecoderStream(
     @Throws(IOException::class)
     override fun close() {
         `in`.close()
-        // Clear state to prevent further use and allow GC
         decodedBufferCount = -1
         decodedBufferReadPos = 0
+        upstreamExhausted = true
+        emittedFinalBytes = true
         decoder.reset()
         markDecodedBuffer = null
         isMarkSet = false
@@ -197,7 +214,7 @@ class Base91DecoderStream(
     override fun mark(readlimit: Int) {
         if (!markSupported()) return
         `in`.mark(readlimit * 2) // Mark underlying stream (allow more due to encoding expansion)
-        decoder.saveMark() // Save decoder state
+        markDecoderState = decoder.snapshotState()
 
         // Save decoded buffer state
         markDecodedBuffer =
@@ -208,6 +225,8 @@ class Base91DecoderStream(
             }
         markDecodedBufferReadPos = decodedBufferReadPos
         markDecodedBufferCount = decodedBufferCount
+        markUpstreamExhausted = upstreamExhausted
+        markEmittedFinalBytes = emittedFinalBytes
         isMarkSet = true // Mark that our stream's mark() was called
     }
 
@@ -217,14 +236,12 @@ class Base91DecoderStream(
         if (!markSupported()) {
             throw IOException("mark/reset not supported by underlying stream")
         }
-        if (
-            !isMarkSet || !decoder.isMarkSaved()
-        ) { // Check if our mark method was called and decoder state was saved
+        if (!isMarkSet || markDecoderState == null) {
             throw IOException("mark() not called or invalidated before reset()")
         }
 
         `in`.reset() // Reset underlying stream
-        decoder.restoreMark() // Restore decoder state
+        decoder.restoreState(markDecoderState!!) // Restore decoder state
 
         // Restore decoded buffer state
         markDecodedBuffer?.let {
@@ -233,9 +250,13 @@ class Base91DecoderStream(
                 decodedBuffer = ByteArray(it.size)
             }
             System.arraycopy(it, 0, decodedBuffer, 0, it.size)
+        } ?: run {
+            decodedBufferCount = 0
         }
         decodedBufferReadPos = markDecodedBufferReadPos
         decodedBufferCount = markDecodedBufferCount
+        upstreamExhausted = markUpstreamExhausted
+        emittedFinalBytes = markEmittedFinalBytes
 
         // According to InputStream spec, mark is typically invalidated after reset,
         // but some impls allow multiple resets. Let's keep mark valid for simplicity here.

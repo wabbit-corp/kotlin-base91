@@ -19,6 +19,10 @@ class Base91EncoderStream(
     private val inputBufferSize: Int = 13 * 3, // Process ~3 blocks of input
     private val outputBufferSize: Int = 16 * 3, // Room for ~3 blocks of output + finish
 ) : FilterOutputStream(outputStream) {
+    init {
+        requireBase91EncodingBufferSizes(inputBufferSize, outputBufferSize)
+    }
+
     private val encoder = Base91.Encoder()
     private val inputBuffer: ByteArray = ByteArray(inputBufferSize)
     private val outputBuffer: ByteArray = ByteArray(outputBufferSize)
@@ -80,20 +84,11 @@ class Base91EncoderStream(
     }
 
     /**
-     * Flushes the stream. This encodes any buffered bytes and writes them to the underlying stream.
-     * It then calls the `finish` method on the encoder to handle any final leftover bits and writes
-     * the result. Finally, it flushes the underlying output stream.
+     * Flushes any currently encodable output downstream without finalizing the Base91 stream.
      */
     @Throws(IOException::class)
     override fun flush() {
-        // Encode and write any remaining bytes in the input buffer
         flushBuffer()
-        // Process leftover bits in the encoder's queue
-        val finalEncodedCount = encoder.finish(outputBuffer, 0)
-        if (finalEncodedCount > 0) {
-            out.write(outputBuffer, 0, finalEncodedCount)
-        }
-        // Flush the underlying stream
         super.flush()
     }
 
@@ -104,12 +99,14 @@ class Base91EncoderStream(
     @Throws(IOException::class)
     override fun close() {
         try {
-            // Ensure everything is flushed before closing
-            flush()
+            flushBuffer()
+            val finalEncodedCount = encoder.finish(outputBuffer, 0)
+            if (finalEncodedCount > 0) {
+                out.write(outputBuffer, 0, finalEncodedCount)
+            }
+            super.flush()
         } finally {
-            // Close the underlying stream even if flush fails
             super.close()
-            // Clean up encoder state (optional, as stream is closed)
             encoder.reset()
         }
     }

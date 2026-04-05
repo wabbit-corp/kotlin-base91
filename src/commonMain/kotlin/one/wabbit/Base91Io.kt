@@ -10,12 +10,18 @@ import kotlinx.io.buffered
 fun Sink.base91Encoding(
     inputBufferSize: Int = 13 * 3,
     outputBufferSize: Int = 16 * 3,
-): Sink = Base91EncodingRawSink(this, inputBufferSize, outputBufferSize).buffered()
+): Sink {
+    requireBase91EncodingBufferSizes(inputBufferSize, outputBufferSize)
+    return Base91EncodingRawSink(this, inputBufferSize, outputBufferSize).buffered()
+}
 
 fun Source.base91Decoding(
     encodedBufferSize: Int = 16 * 3,
     decodedBufferSize: Int = 14 * 3,
-): Source = Base91DecodingRawSource(this, encodedBufferSize, decodedBufferSize).buffered()
+): Source {
+    requireBase91DecodingBufferSizes(encodedBufferSize, decodedBufferSize)
+    return Base91DecodingRawSource(this, encodedBufferSize, decodedBufferSize).buffered()
+}
 
 private class Base91EncodingRawSink(
     private val downstream: Sink,
@@ -124,7 +130,8 @@ private class Base91DecodingRawSource(
             if (!refillDecodedBuffer()) return -1L
         }
 
-        val bytesToRead = minOf(byteCount.toInt(), decodedCount - decodedReadPos)
+        val bytesToRead =
+            minOf(byteCount, (decodedCount - decodedReadPos).toLong()).toInt()
         sink.write(decodedBuffer, decodedReadPos, decodedReadPos + bytesToRead)
         decodedReadPos += bytesToRead
         return bytesToRead.toLong()
