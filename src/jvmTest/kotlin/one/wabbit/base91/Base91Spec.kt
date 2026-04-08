@@ -1,6 +1,6 @@
 @file:OptIn(PlatformSpecificBase91Api::class)
 
-package one.wabbit
+package one.wabbit.base91
 
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -19,6 +19,43 @@ class Base91Spec {
             if (pos >= count) return -1
             b[off] = buf[pos++]
             return 1
+        }
+    }
+
+    private class StrictMarkInputStream(bytes: ByteArray) : ByteArrayInputStream(bytes) {
+        private var limit = -1
+        private var readSinceMark = 0
+        private var valid = false
+
+        override fun mark(readlimit: Int) {
+            super.mark(readlimit)
+            limit = readlimit
+            readSinceMark = 0
+            valid = true
+        }
+
+        override fun read(b: ByteArray, off: Int, len: Int): Int {
+            val n = super.read(b, off, len)
+            if (n > 0 && valid) {
+                readSinceMark += n
+                if (readSinceMark > limit) valid = false
+            }
+            return n
+        }
+
+        override fun read(): Int {
+            val n = super.read()
+            if (n != -1 && valid) {
+                readSinceMark += 1
+                if (readSinceMark > limit) valid = false
+            }
+            return n
+        }
+
+        override fun reset() {
+            if (!valid) throw IOException("mark invalidated")
+            super.reset()
+            readSinceMark = 0
         }
     }
 
@@ -183,6 +220,26 @@ class Base91Spec {
             assertEquals(0x50, stream.read())
             assertEquals(-1, stream.read())
         }
+    }
+
+    @Test
+    fun `decoder stream mark survives one decoded byte on strict streams`() {
+        Base91DecoderStream(StrictMarkInputStream(testEncodedBytes)).use { stream ->
+            stream.mark(1)
+            stream.read()
+            stream.reset()
+        }
+    }
+
+    @Test
+    fun `encoder stream rejects writes after close`() {
+        val out = ByteArrayOutputStream()
+        val stream = Base91EncoderStream(out)
+
+        stream.close()
+
+        assertFailsWith<IOException> { stream.write("A".encodeToByteArray()) }
+        assertFailsWith<IOException> { stream.flush() }
     }
 
     // Data for stream specific tests

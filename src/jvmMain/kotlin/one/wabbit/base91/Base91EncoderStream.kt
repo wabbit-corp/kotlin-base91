@@ -1,4 +1,4 @@
-package one.wabbit
+package one.wabbit.base91
 
 import java.io.FilterOutputStream
 import java.io.IOException
@@ -27,6 +27,14 @@ class Base91EncoderStream(
     private val inputBuffer: ByteArray = ByteArray(inputBufferSize)
     private val outputBuffer: ByteArray = ByteArray(outputBufferSize)
     private var inputBufferCount: Int = 0 // Number of bytes currently in inputBuffer
+    private var closed = false
+
+    @Throws(IOException::class)
+    private fun ensureOpen() {
+        if (closed) {
+            throw IOException("Stream closed")
+        }
+    }
 
     /**
      * Encodes the contents of the input buffer and writes the resulting Base91 characters to the
@@ -46,6 +54,7 @@ class Base91EncoderStream(
 
     @Throws(IOException::class)
     override fun write(b: Int) {
+        ensureOpen()
         // Add the byte to the buffer
         inputBuffer[inputBufferCount++] = b.toByte()
         // If the buffer is full, flush it
@@ -56,6 +65,7 @@ class Base91EncoderStream(
 
     @Throws(IOException::class)
     override fun write(b: ByteArray, off: Int, len: Int) {
+        ensureOpen()
         if (off < 0 || len < 0 || len > b.size - off) {
             throw IndexOutOfBoundsException()
         }
@@ -88,6 +98,7 @@ class Base91EncoderStream(
      */
     @Throws(IOException::class)
     override fun flush() {
+        ensureOpen()
         flushBuffer()
         super.flush()
     }
@@ -98,15 +109,17 @@ class Base91EncoderStream(
      */
     @Throws(IOException::class)
     override fun close() {
+        if (closed) return
         try {
             flushBuffer()
             val finalEncodedCount = encoder.finish(outputBuffer, 0)
             if (finalEncodedCount > 0) {
                 out.write(outputBuffer, 0, finalEncodedCount)
             }
-            super.flush()
+            out.flush()
         } finally {
-            super.close()
+            closed = true
+            out.close()
             encoder.reset()
         }
     }

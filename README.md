@@ -31,7 +31,7 @@ dependencies {
 ## Byte Array Example
 
 ```kotlin
-import one.wabbit.Base91
+import one.wabbit.base91.Base91
 
 val payload = "Hello".encodeToByteArray()
 val encoded = Base91.encode(payload)
@@ -47,8 +47,8 @@ The common API also includes stream-style wrappers for `kotlinx-io`:
 
 ```kotlin
 import kotlinx.io.Buffer
-import one.wabbit.base91Decoding
-import one.wabbit.base91Encoding
+import one.wabbit.base91.base91Decoding
+import one.wabbit.base91.base91Encoding
 
 val source = Buffer().apply { write("Hello".encodeToByteArray()) }
 val encoded = Buffer()

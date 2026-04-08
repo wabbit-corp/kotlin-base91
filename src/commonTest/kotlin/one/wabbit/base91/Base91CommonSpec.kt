@@ -1,4 +1,4 @@
-package one.wabbit
+package one.wabbit.base91
 
 import kotlin.random.Random
 import kotlin.test.Test
@@ -142,6 +142,13 @@ class Base91CommonSpec {
         }
         assertFailsWith<IllegalArgumentException> {
             Buffer().base91Decoding(encodedBufferSize = 2, decodedBufferSize = 0)
+        }
+    }
+
+    @Test
+    fun `decoding buffer validation rejects overflow sized encoded buffers`() {
+        assertFailsWith<IllegalArgumentException> {
+            requireBase91DecodingBufferSizes(Int.MAX_VALUE, 1)
         }
     }
 }

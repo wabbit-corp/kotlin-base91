@@ -1,4 +1,4 @@
-package one.wabbit
+package one.wabbit.base91
 
 @RequiresOptIn(
     level = RequiresOptIn.Level.WARNING,

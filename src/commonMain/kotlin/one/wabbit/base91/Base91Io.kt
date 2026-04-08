@@ -1,4 +1,4 @@
-package one.wabbit
+package one.wabbit.base91
 
 import kotlinx.io.Buffer
 import kotlinx.io.RawSink

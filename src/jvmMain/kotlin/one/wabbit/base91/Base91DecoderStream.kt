@@ -1,4 +1,4 @@
-package one.wabbit
+package one.wabbit.base91
 
 import java.io.FilterInputStream
 import java.io.IOException
@@ -196,14 +196,18 @@ class Base91DecoderStream(
 
     @Throws(IOException::class)
     override fun close() {
-        `in`.close()
-        decodedBufferCount = -1
-        decodedBufferReadPos = 0
-        upstreamExhausted = true
-        emittedFinalBytes = true
-        decoder.reset()
-        markDecodedBuffer = null
-        isMarkSet = false
+        try {
+            `in`.close()
+        } finally {
+            decodedBufferCount = -1
+            decodedBufferReadPos = 0
+            upstreamExhausted = true
+            emittedFinalBytes = true
+            decoder.reset()
+            markDecoderState = null
+            markDecodedBuffer = null
+            isMarkSet = false
+        }
     }
 
     // --- Mark/Reset Implementation ---
@@ -213,7 +217,13 @@ class Base91DecoderStream(
     @Synchronized
     override fun mark(readlimit: Int) {
         if (!markSupported()) return
-        `in`.mark(readlimit * 2) // Mark underlying stream (allow more due to encoding expansion)
+        val readLimitLong = readlimit.coerceAtLeast(0).toLong()
+        val encodedBudget =
+            saturatingAddLong(
+                saturatingMultiplyLong(readLimitLong, 2L),
+                encodedBufferSize.toLong(),
+            )
+        `in`.mark(encodedBudget.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
         markDecoderState = decoder.snapshotState()
 
         // Save decoded buffer state
@@ -261,5 +271,16 @@ class Base91DecoderStream(
         // According to InputStream spec, mark is typically invalidated after reset,
         // but some impls allow multiple resets. Let's keep mark valid for simplicity here.
         // isMarkSet = false; // Optional: Invalidate mark after reset
+    }
+
+    private fun saturatingAddLong(left: Long, right: Long): Long {
+        val result = left + right
+        return if (((left xor result) and (right xor result)) < 0) Long.MAX_VALUE else result
+    }
+
+    private fun saturatingMultiplyLong(left: Long, right: Long): Long {
+        if (left == 0L || right == 0L) return 0L
+        if (left > Long.MAX_VALUE / right) return Long.MAX_VALUE
+        return left * right
     }
 }

@@ -1,4 +1,4 @@
-package one.wabbit
+package one.wabbit.base91
 import kotlin.math.ceil
 
 /** Custom exception for Base91 encoding/decoding errors, including invalid input characters. */
@@ -224,9 +224,6 @@ object Base91 {
         private var decodeValue =
             -1 // Holds value of the first character in a pair (-1 means waiting for first char)
 
-        // State for mark/reset functionality in streams
-        private var savedState: IntArray? = null // Stores [bitQueue, bitCount, decodeValue]
-
         /**
          * Decodes a chunk of the input Base91 byte array.
          *
@@ -326,28 +323,7 @@ object Base91 {
             bitQueue = 0
             bitCount = 0
             decodeValue = -1
-            savedState = null // Clear saved state on reset
         }
-
-        // --- Methods for Stream Mark/Reset ---
-
-        /** Saves the current decoder state for potential reset. */
-        fun saveMark() {
-            val state = snapshotState()
-            savedState = intArrayOf(state.bitQueue, state.bitCount, state.decodeValue)
-        }
-
-        /** Restores the decoder state from the last saveMark. Does nothing if no mark was saved. */
-        fun restoreMark() {
-            savedState?.let {
-                bitQueue = it[0]
-                bitCount = it[1]
-                decodeValue = it[2]
-            }
-        }
-
-        /** Returns true if a mark has been saved. */
-        fun isMarkSaved(): Boolean = savedState != null
 
         fun snapshotState(): State = State(bitQueue = bitQueue, bitCount = bitCount, decodeValue = decodeValue)
 
@@ -387,10 +363,13 @@ internal fun requireBase91EncodingBufferSizes(inputBufferSize: Int, outputBuffer
 
     val requiredOutputSize =
         maxOf(
-            2,
-            (((inputBufferSize.toLong() * 8L) + 12L) / Base91.BITS_13).toInt() * 2,
+            2L,
+            (((inputBufferSize.toLong() * 8L) + 12L) / Base91.BITS_13) * 2L,
         )
-    require(outputBufferSize >= requiredOutputSize) {
+    require(requiredOutputSize <= Int.MAX_VALUE.toLong()) {
+        "inputBufferSize is too large to validate safely: $inputBufferSize"
+    }
+    require(outputBufferSize.toLong() >= requiredOutputSize) {
         "outputBufferSize must be >= $requiredOutputSize for inputBufferSize=$inputBufferSize"
     }
 }
@@ -399,13 +378,16 @@ internal fun requireBase91DecodingBufferSizes(encodedBufferSize: Int, decodedBuf
     require(encodedBufferSize > 0) { "encodedBufferSize must be > 0" }
     require(decodedBufferSize > 0) { "decodedBufferSize must be > 0" }
 
-    val maxPairsCompletedPerChunk = (encodedBufferSize + 1) / 2
+    val maxPairsCompletedPerChunk = (encodedBufferSize.toLong() + 1L) / 2L
     val requiredDecodedSize =
         maxOf(
-            1,
-            ((7L + maxPairsCompletedPerChunk.toLong() * Base91.BITS_14) / 8L).toInt(),
+            1L,
+            (7L + maxPairsCompletedPerChunk * Base91.BITS_14) / 8L,
         )
-    require(decodedBufferSize >= requiredDecodedSize) {
+    require(requiredDecodedSize <= Int.MAX_VALUE.toLong()) {
+        "encodedBufferSize is too large to validate safely: $encodedBufferSize"
+    }
+    require(decodedBufferSize.toLong() >= requiredDecodedSize) {
         "decodedBufferSize must be >= $requiredDecodedSize for encodedBufferSize=$encodedBufferSize"
     }
 }
